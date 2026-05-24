@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}科室管理{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-building"></i> 科室管理</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#deptModal">
+        <i class="bi bi-plus-lg"></i> 新建科室
+    </button>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead class="table-light">
+            <tr><th>编号</th><th>名称</th><th>描述</th><th>操作</th></tr>
+        </thead>
+        <tbody id="deptTableBody">
+            <tr><td colspan="4" class="text-center text-muted py-4">加载中...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="modal fade" id="deptModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新建科室</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="deptForm">
+                    <div class="mb-3">
+                        <label class="form-label">科室编号 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="d_code" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">科室名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="d_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="d_description" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveDept()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const API = '/api/departments';
+
+async function loadDepts() {
+    const res = await fetch(API, {headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}});
+    if (!res.ok) return;
+    const depts = await res.json();
+    document.getElementById('deptTableBody').innerHTML = depts.map(d => `
+        <tr>
+            <td><code>${d.code}</code></td>
+            <td>${d.name}</td>
+            <td>${d.description || '-'}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteDept('${d.id}')"><i class="bi bi-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function saveDept() {
+    const body = {
+        code: document.getElementById('d_code').value,
+        name: document.getElementById('d_name').value,
+        description: document.getElementById('d_description').value,
+    };
+    const res = await fetch(API, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('token')},
+        body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('deptModal')).hide();
+        document.getElementById('deptForm').reset();
+        loadDepts();
+    } else {
+        alert(data.detail);
+    }
+}
+
+async function deleteDept(id) {
+    if (!confirm('确定删除该科室？')) return;
+    const res = await fetch(`${API}/${id}`, {
+        method: 'DELETE',
+        headers: {Authorization: 'Bearer ' + localStorage.getItem('token')},
+    });
+    if (res.ok) loadDepts();
+    else alert((await res.json()).detail);
+}
+
+document.addEventListener('DOMContentLoaded', loadDepts);
+</script>
+{% endblock %}

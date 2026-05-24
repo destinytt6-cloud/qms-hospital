@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}文件详情{% endblock %}
+
+{% block content %}
+<div id="docDetail">
+    <div class="text-center py-5"><div class="spinner-border"></div></div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const API = '/api/documents';
+const docId = '{{ doc_id }}';
+const statusLabels = {draft:'起草中', review:'审核中', approved:'已批准', published:'已发布', archived:'已归档', obsolete:'已废止'};
+const statusColors = {draft:'secondary', review:'warning', approved:'info', published:'success', archived:'dark', obsolete:'danger'};
+const actionLabels = {submit:'提交审核', approve:'批准', reject:'驳回', publish:'发布', archive:'归档', recall:'撤回'};
+
+async function loadDoc() {
+    try {
+        const res = await fetch(`${API}/${docId}`, {
+            headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}
+        });
+        if (!res.ok) { window.location.href = '/dashboard'; return; }
+        const doc = await res.json();
+
+        document.getElementById('docDetail').innerHTML = `
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card shadow mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white">
+                            <h5 class="mb-0">${doc.title}</h5>
+                            <span class="badge bg-${statusColors[doc.status]} fs-6">${statusLabels[doc.status]}</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4"><small class="text-muted">文件编号</small><br><code>${doc.document_code}</code></div>
+                                <div class="col-md-2"><small class="text-muted">版本</small><br>v${doc.version}</div>
+                                <div class="col-md-3"><small class="text-muted">分类</small><br>${doc.category || '-'}</div>
+                                <div class="col-md-3"><small class="text-muted">科室</small><br>${doc.department || '-'}</div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-4"><small class="text-muted">创建人</small><br>${doc.creator || '-'}</div>
+                                <div class="col-md-4"><small class="text-muted">生效日期</small><br>${doc.effective_date ? new Date(doc.effective_date).toLocaleDateString('zh-CN') : '-'}</div>
+                                <div class="col-md-4"><small class="text-muted">复审日期</small><br>${doc.review_date ? new Date(doc.review_date).toLocaleDateString('zh-CN') : '-'}</div>
+                            </div>
+                            <div class="mb-3">
+                                <small class="text-muted">描述</small>
+                                <p class="mb-0">${doc.description || '暂无描述'}</p>
+                            </div>
+                            ${doc.keywords ? `<div><small class="text-muted">关键词</small><br>${doc.keywords.split(',').map(k => `<span class="badge bg-light text-dark me-1">${k.trim()}</span>`).join('')}</div>` : ''}
+                        </div>
+                    </div>
+
+                    <!-- 审批记录 -->
+                    <div class="card shadow mb-3">
+                        <div class="card-header bg-white"><h6 class="mb-0">审批记录</h6></div>
+                        <div class="card-body">
+                            ${doc.approval_records && doc.approval_records.length > 0 ? `
+                            <ul class="list-group list-group-flush">
+                                ${doc.approval_records.map(r => `
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${actionLabels[r.action] || r.action}</strong>
+                                        ${r.comments ? `<br><small>${r.comments}</small>` : ''}
+                                    </div>
+                                    <small class="text-muted">${r.operator} · ${new Date(r.created_at).toLocaleString('zh-CN')}</small>
+                                </li>`).join('')}
+                            </ul>` : '<p class="text-muted mb-0">暂无审批记录</p>'}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <!-- 操作 -->
+                    <div class="card shadow mb-3">
+                        <div class="card-header bg-white"><h6 class="mb-0">操作</h6></div>
+                        <div class="card-body d-grid gap-2">
+                            <a href="/documents/${doc.id}/edit" class="btn btn-outline-primary">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </a>
+                            ${statusActions(doc.status, doc.id)}
+                        </div>
+                    </div>
+
+                    <!-- 附件 -->
+                    <div class="card shadow">
+                        <div class="card-header bg-white"><h6 class="mb-0">附件 (${doc.files ? doc.files.length : 0})</h6></div>
+                        <div class="card-body">
+                            ${doc.files && doc.files.length > 0 ? doc.files.map(f => `
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <div>
+                                    <small><i class="bi bi-file-earmark"></i> ${f.file_name}</small>
+                                    <br><small class="text-muted">v${f.version_number} · ${(f.file_size / 1024).toFixed(1)}KB</small>
+                                </div>
+                                <a href="/api/files/${f.id}" class="btn btn-sm btn-outline-secondary" download>
+                                    <i class="bi bi-download"></i>
+                                </a>
+                            </div>`).join('') : '<p class="text-muted mb-0">暂无附件</p>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById('docDetail').innerHTML = `<div class="alert alert-danger">加载失败: ${err.message}</div>`;
+    }
+}
+
+function statusActions(status, id) {
+    const btns = {
+        draft: `<button class="btn btn-warning" onclick="doAction('submit', ${id})"><i class="bi bi-send"></i> 提交审核</button>`,
+        review: `<button class="btn btn-success" onclick="doAction('approve', ${id})"><i class="bi bi-check"></i> 批准</button>
+                 <button class="btn btn-danger" onclick="doAction('reject', ${id})"><i class="bi bi-x"></i> 驳回</button>`,
+        approved: `<button class="btn btn-success" onclick="doAction('publish', ${id})"><i class="bi bi-megaphone"></i> 发布</button>
+                   <button class="btn btn-danger" onclick="doAction('reject', ${id})"><i class="bi bi-x"></i> 驳回</button>`,
+        published: `<button class="btn btn-dark" onclick="doAction('archive', ${id})"><i class="bi bi-archive"></i> 归档</button>`,
+    };
+    return btns[status] || '<small class="text-muted">无可用操作</small>';
+}
+
+async function doAction(action, id) {
+    const comments = action === 'reject' ? prompt('请输入驳回意见：') : '';
+    if (action === 'reject' && !comments) return;
+
+    const res = await fetch(`${API.replace('/documents','/approval')}/${id}/${action}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + localStorage.getItem('token'),
+        },
+        body: JSON.stringify({comments: comments || ''}),
+    });
+    const data = await res.json();
+    if (res.ok) {
+        loadDoc();
+    } else {
+        alert(data.detail || '操作失败');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadDoc);
+</script>
+{% endblock %}

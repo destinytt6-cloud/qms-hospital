@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑' if mode == 'edit' else '新建' }}文件{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-plus"></i> {{ '编辑文件' if mode == 'edit' else '新建文件' }}</h5>
+            </div>
+            <div class="card-body">
+                <form id="docForm">
+                    <input type="hidden" id="docId" value="{{ doc_id or '' }}">
+
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label class="form-label">文件标题 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="title" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">文件编号 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="document_code" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">文件分类 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="category_id" required>
+                                <option value="">请选择</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">归属科室</label>
+                            <select class="form-select" id="department_id">
+                                <option value="">请选择</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">摘要/描述</label>
+                        <textarea class="form-control" id="description" rows="3"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">关键词（逗号分隔）</label>
+                        <input type="text" class="form-control" id="keywords" placeholder="例如: 质量,手册,ISO15189">
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">生效日期</label>
+                            <input type="date" class="form-control" id="effective_date">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">复审日期</label>
+                            <input type="date" class="form-control" id="review_date">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">过期日期</label>
+                            <input type="date" class="form-control" id="expiry_date">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">附件文件</label>
+                        <input type="file" class="form-control" id="file" {{ 'required' if mode != 'edit' else '' }}>
+                        {% if mode == 'edit' %}<small class="text-muted">如不上传新文件则保持现有版本</small>{% endif %}
+                    </div>
+
+                    <div class="mb-3" id="changeSummaryGroup" style="display:none;">
+                        <label class="form-label">变更说明（上传新版本时必填）</label>
+                        <textarea class="form-control" id="change_summary" rows="2"></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/dashboard" class="btn btn-outline-secondary">取消</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> {{ '保存修改' if mode == 'edit' else '创建文件' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const API = '/api/documents';
+const mode = '{{ mode }}';
+
+async function loadOptions() {
+    const [catRes, deptRes] = await Promise.all([
+        fetch('/api/categories', {headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}}),
+        fetch('/api/departments', {headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}}),
+    ]);
+    if (catRes.ok) {
+        const cats = await catRes.json();
+        document.getElementById('category_id').innerHTML = '<option value="">请选择</option>' +
+            cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+    if (deptRes.ok) {
+        const depts = await deptRes.json();
+        document.getElementById('department_id').innerHTML = '<option value="">请选择</option>' +
+            depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    }
+}
+
+// 编辑模式：加载已有数据
+if (mode === 'edit') {
+    const docId = document.getElementById('docId').value;
+    fetch(`${API}/${docId}`, {
+        headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}
+    }).then(r => r.json()).then(doc => {
+        document.getElementById('title').value = doc.title || '';
+        document.getElementById('document_code').value = doc.document_code || '';
+        document.getElementById('description').value = doc.description || '';
+        document.getElementById('keywords').value = doc.keywords || '';
+        if (doc.effective_date) document.getElementById('effective_date').value = doc.effective_date.slice(0,10);
+        if (doc.review_date) document.getElementById('review_date').value = doc.review_date.slice(0,10);
+        if (doc.expiry_date) document.getElementById('expiry_date').value = doc.expiry_date.slice(0,10);
+        // 选中分类和科室
+        setTimeout(() => {
+            if (doc.category_id) document.getElementById('category_id').value = doc.category_id;
+            if (doc.department_id) document.getElementById('department_id').value = doc.department_id;
+        }, 200);
+    });
+}
+
+// 文件选择时显示变更说明
+document.getElementById('file').addEventListener('change', function() {
+    document.getElementById('changeSummaryGroup').style.display = this.files.length > 0 ? 'block' : 'none';
+});
+
+document.getElementById('docForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+
+    try {
+        const formData = new FormData();
+        formData.append('title', document.getElementById('title').value);
+        formData.append('document_code', document.getElementById('document_code').value);
+        formData.append('category_id', document.getElementById('category_id').value);
+        formData.append('department_id', document.getElementById('department_id').value || '');
+        formData.append('description', document.getElementById('description').value);
+        formData.append('keywords', document.getElementById('keywords').value);
+        formData.append('effective_date', document.getElementById('effective_date').value || '');
+        formData.append('review_date', document.getElementById('review_date').value || '');
+        formData.append('expiry_date', document.getElementById('expiry_date').value || '');
+
+        const fileInput = document.getElementById('file');
+        if (fileInput.files.length > 0) {
+            formData.append('file', fileInput.files[0]);
+            formData.append('change_summary', document.getElementById('change_summary').value);
+        }
+
+        const docId = document.getElementById('docId').value;
+        let url = API;
+        let method = 'POST';
+        if (mode === 'edit' && docId) {
+            url = `${API}/${docId}`;
+            method = 'PUT';
+        }
+
+        const res = await fetch(url, {
+            method,
+            headers: {Authorization: 'Bearer ' + localStorage.getItem('token')},
+            body: formData,
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            window.location.href = '/documents/' + (data.id || docId);
+        } else {
+            alert(data.detail || '操作失败');
+        }
+    } catch (err) {
+        alert('网络错误: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg"></i> ' + (mode === 'edit' ? '保存修改' : '创建文件');
+    }
+});
+
+document.addEventListener('DOMContentLoaded', loadOptions);
+</script>
+{% endblock %}

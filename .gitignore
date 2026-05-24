@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite3
+
+# Uploads
+uploads/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

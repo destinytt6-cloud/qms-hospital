@@ -1,0 +1,50 @@
+/* QMS 系统自定义样式 */
+body {
+    background-color: #f5f6fa;
+    min-height: 100vh;
+}
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
+}
+
+.card {
+    border-radius: 8px;
+    border: none;
+}
+
+.card-header {
+    border-radius: 8px 8px 0 0 !important;
+}
+
+.table > :not(caption) > * > * {
+    vertical-align: middle;
+}
+
+.badge {
+    font-weight: 500;
+}
+
+pre {
+    margin-bottom: 0;
+}
+
+/* 登录页 */
+.card.shadow {
+    box-shadow: 0 4px 24px rgba(0,0,0,.08) !important;
+}
+
+/* 分页 */
+.page-link {
+    cursor: pointer;
+}
+
+/* 表格行悬停 */
+.table-hover tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.03);
+}
+
+/* 按钮间距 */
+.btn + .btn {
+    margin-left: 4px;
+}

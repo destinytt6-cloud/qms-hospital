@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}QMS - 文件库{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-files"></i> 文件库</h4>
+    <a href="/documents/new" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> 新建文件
+    </a>
+</div>
+
+<!-- 筛选栏 -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-3">
+                <input type="text" class="form-control" id="searchKeyword" placeholder="搜索标题/编号/关键词...">
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="filterStatus">
+                    <option value="">全部状态</option>
+                    <option value="draft">起草中</option>
+                    <option value="review">审核中</option>
+                    <option value="approved">已批准</option>
+                    <option value="published">已发布</option>
+                    <option value="archived">已归档</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="filterCategory">
+                    <option value="">全部分类</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" id="filterDepartment">
+                    <option value="">全部科室</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-outline-primary w-100" onclick="loadDocuments(1)">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 文件列表 -->
+<div class="table-responsive">
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>文件编号</th>
+                <th>标题</th>
+                <th>版本</th>
+                <th>分类</th>
+                <th>科室</th>
+                <th>状态</th>
+                <th>更新日期</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="docTableBody">
+            <tr><td colspan="8" class="text-center text-muted py-5">加载中...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 分页 -->
+<nav>
+    <ul class="pagination justify-content-center" id="pagination"></ul>
+</nav>
+
+<!-- 状态标签映射 -->
+<div id="statusMap" class="d-none">{"draft":"起草中","review":"审核中","approved":"已批准","published":"已发布","archived":"已归档","obsolete":"已废止"}</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const API = '/api/documents';
+let currentPage = 1;
+
+function statusBadge(s) {
+    const m = JSON.parse(document.getElementById('statusMap').textContent);
+    const colors = {draft:'secondary', review:'warning', approved:'info', published:'success', archived:'dark', obsolete:'danger'};
+    return `<span class="badge bg-${colors[s] || 'secondary'}">${m[s] || s}</span>`;
+}
+
+function formatDate(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('zh-CN');
+}
+
+async function loadFilters() {
+    const [catRes, deptRes] = await Promise.all([
+        fetch('/api/categories', {headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}}),
+        fetch('/api/departments', {headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}}),
+    ]);
+    if (catRes.ok) {
+        const cats = await catRes.json();
+        document.getElementById('filterCategory').innerHTML = '<option value="">全部分类</option>' +
+            cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+    if (deptRes.ok) {
+        const depts = await deptRes.json();
+        document.getElementById('filterDepartment').innerHTML = '<option value="">全部科室</option>' +
+            depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+    }
+}
+
+async function loadDocuments(page) {
+    currentPage = page;
+    const kw = document.getElementById('searchKeyword').value;
+    const st = document.getElementById('filterStatus').value;
+    const ct = document.getElementById('filterCategory').value;
+    const dp = document.getElementById('filterDepartment').value;
+
+    const params = new URLSearchParams({page, page_size: 20});
+    if (kw) params.set('keyword', kw);
+    if (st) params.set('status', st);
+    if (ct) params.set('category_id', ct);
+    if (dp) params.set('department_id', dp);
+
+    document.getElementById('docTableBody').innerHTML = '<tr><td colspan="8" class="text-center py-4"><div class="spinner-border"></div></td></tr>';
+
+    try {
+        const res = await fetch(`${API}?${params}`, {
+            headers: {Authorization: 'Bearer ' + localStorage.getItem('token')}
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail);
+
+        const tbody = document.getElementById('docTableBody');
+        if (data.items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5">暂无文件</td></tr>';
+        } else {
+            tbody.innerHTML = data.items.map(d => `
+                <tr>
+                    <td><code>${d.document_code}</code></td>
+                    <td><a href="/documents/${d.id}" class="text-decoration-none">${d.title}</a></td>
+                    <td>v${d.version}</td>
+                    <td>${d.category || '-'}</td>
+                    <td>${d.department || '-'}</td>
+                    <td>${statusBadge(d.status)}</td>
+                    <td><small class="text-muted">${formatDate(d.updated_at)}</small></td>
+                    <td>
+                        <a href="/documents/${d.id}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 分页
+        const totalPages = Math.ceil(data.total / data.page_size);
+        const pg = document.getElementById('pagination');
+        pg.innerHTML = '';
+        for (let i = 1; i <= totalPages; i++) {
+            pg.innerHTML += `<li class="page-item ${i === page ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="loadDocuments(${i})">${i}</a>
+            </li>`;
+        }
+    } catch (err) {
+        document.getElementById('docTableBody').innerHTML =
+            `<tr><td colspan="8" class="text-center text-danger py-4">加载失败: ${err.message}</td></tr>`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadFilters();
+    loadDocuments(1);
+});
+</script>
+{% endblock %}
